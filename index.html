@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QRコード解析アプリ</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>QRコード解析アプリ</h1>
+
+    <div class="container">
+        <div class="camera-section">
+            <h2>カメラ映像</h2>
+            <video id="camera-stream" width="320" height="240" autoplay playsinline></video>
+            <canvas id="snapshot-canvas" style="display:none;"></canvas> <!-- QRコード読み取り用の一時Canvas -->
+        </div>
+
+        <div class="preview-section">
+            <h2>読み込んだQRコード (プレビュー)</h2>
+            <canvas id="qr-preview-canvas" width="250" height="250"></canvas>
+            <p id="qr-data-display">QRコードデータ: まだ読み込まれていません</p>
+        </div>
+
+        <div class="controls-section">
+            <button id="decompose-button">分解</button>
+        </div>
+
+        <div class="analysis-section">
+            <h2>分解・並び替え結果</h2>
+            <canvas id="analysis-canvas" width="250" height="250"></canvas>
+            <p id="ratio-display">白黒比率: N/A</p>
+        </div>
+    </div>
+
+    <!-- jsQRライブラリの読み込み (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <!-- 自作スクリプトの読み込み -->
+    <script src="script.js"></script>
+</body>
+</html>
