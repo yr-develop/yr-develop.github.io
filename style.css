@@ -1,0 +1,63 @@
+body {
+    font-family: sans-serif;
+    margin: 20px;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+h1, h2 {
+    text-align: center;
+    color: #2c3e50;
+}
+
+.container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-around;
+    gap: 20px;
+}
+
+.camera-section, .preview-section, .analysis-section, .controls-section {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    text-align: center;
+    min-width: 300px; /* 各セクションの最小幅 */
+}
+
+video, canvas {
+    border: 1px solid #ccc;
+    display: block; /* 中央揃えのため */
+    margin: 10px auto; /* 中央揃えのため */
+    background-color: #eee; /* Canvasの背景を一時的に分かりやすく */
+}
+
+#qr-preview-canvas, #analysis-canvas {
+    background-color: #fff; /* QRコードが見やすいように白背景 */
+}
+
+
+button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 10px 2px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #2980b9;
+}
+
+p {
+    margin-top: 10px;
+    font-size: 0.9em;
+}
