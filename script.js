@@ -48,40 +48,84 @@ async function startCamera() {
     }
 }
 
-// QRコードスキャン関数
 function scanQRCode() {
     if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA && localStream && localStream.active) {
-        // videoの現在のフレームをsnapshotCanvasに描画
         snapshotContext.drawImage(videoElement, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
-
-        // snapshotCanvasからImageDataを取得
         const imageData = snapshotContext.getImageData(0, 0, snapshotCanvas.width, snapshotCanvas.height);
-
-        // jsQRでQRコードを検出
         const code = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: "dontInvert", // 通常のQRコードのみ（反転色は試行しない）
+            inversionAttempts: "dontInvert",
         });
 
         if (code) {
-            // QRコードが検出された場合
             qrDataDisplay.textContent = `QRコードデータ: ${code.data}`;
-            console.log("QRコード検出:", code);
-            console.log("データ:", code.data);
-            console.log("位置:", code.location);
+            // console.log("QRコード検出:", code); // ログは必要に応じてコメントアウト/解除
 
-            // ここで一度スキャンを止めるか、連続スキャンするか選べる
-            // 今回は連続スキャンを維持し、最新のものを表示
-            // drawQRCodePreview(code); // 次のステップで実装
+            // 新しいQRコードが検出された場合のみプレビューを更新
+            if (code.data !== lastDetectedQrCodeData) {
+                lastDetectedQrCodeData = code.data;
+                drawQRCodePreview(code); // ★★★ この行のコメントを解除して有効化 ★★★
+            }
 
         } else {
-            // QRコードが見つからない場合（何もしないか、メッセージを出すなど）
-            // qrDataDisplay.textContent = 'QRコードをスキャン中...'; // 頻繁に更新されるのでコメントアウト推奨
+            // QRコードが見つからない場合、プレビューをクリアするか、最後に検出したものを保持するか
+            // 今回は保持する（クリアする場合は lastDetectedQrCodeData = null; なども行う）
         }
     }
-    // 次のフレームで再度スキャン (ブラウザが最適なタイミングで呼び出す)
     if (localStream && localStream.active) {
         requestAnimationFrame(scanQRCode);
     }
+}
+
+// ★★★ 新しく追加する関数 ★★★
+// QRコードをプレビューCanvasに描画する関数
+function drawQRCodePreview(code) {
+    const matrix = code.matrix; // jsQR v1.4.0 からは code.matrix でQRのバイナリ行列を取得
+    if (!matrix) {
+        console.error("QRコードのmatrixデータが見つかりません。", code);
+        // 旧バージョン(jsQR 1.3.x以前)の場合は、code.binaryData と code.matrixWidth を使う必要があった
+        // 今回使用している v1.4.0 では code.matrix で直接取得できる
+        // もし古いjsQRを使っている場合は、この部分の取得方法を修正する必要がある
+        return;
+    }
+
+    const matrixWidth = matrix.width;
+    const matrixHeight = matrix.height; // 通常、QRコードは正方形なので width と height は同じ
+
+    // Canvasのクリア
+    qrPreviewContext.clearRect(0, 0, qrPreviewCanvas.width, qrPreviewCanvas.height);
+
+    // 各モジュール（QRコードの白黒の点）のサイズを計算
+    // CanvasサイズをQRコードのモジュール数で割る
+    const moduleSizeX = qrPreviewCanvas.width / matrixWidth;
+    const moduleSizeY = qrPreviewCanvas.height / matrixHeight;
+    const moduleSize = Math.min(moduleSizeX, moduleSizeY); // 小さい方に合わせる（アスペクト比維持）
+
+    // QRコードをCanvasの中央に描画するためのオフセット
+    const offsetX = (qrPreviewCanvas.width - moduleSize * matrixWidth) / 2;
+    const offsetY = (qrPreviewCanvas.height - moduleSize * matrixHeight) / 2;
+
+    // マトリックスデータを走査して描画
+    for (let y = 0; y < matrixHeight; y++) {
+        for (let x = 0; x < matrixWidth; x++) {
+            const dataIndex = y * matrixWidth + x;
+            if (matrix.data[dataIndex]) { // データが1なら黒モジュール
+                qrPreviewContext.fillStyle = 'black';
+            } else { // データが0なら白モジュール
+                qrPreviewContext.fillStyle = 'white';
+            }
+            // fillRectでモジュールを描画
+            // (x * moduleSize) と (y * moduleSize) が各モジュールの左上の座標
+            // moduleSize がモジュールの幅と高さ
+            // 0.5を加えるのは、ピクセル境界のアンチエイリアスを避けるため（くっきり描画）
+            qrPreviewContext.fillRect(
+                Math.floor(offsetX + x * moduleSize),
+                Math.floor(offsetY + y * moduleSize),
+                Math.ceil(moduleSize), // 切り上げで隙間を防ぐ
+                Math.ceil(moduleSize)  // 切り上げで隙間を防ぐ
+            );
+        }
+    }
+    console.log("QRコードプレビューを描画しました。");
 }
 
 // ページ読み込み完了時にカメラを開始
