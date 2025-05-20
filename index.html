@@ -9,33 +9,60 @@
 <body>
     <h1>QRコード解析アプリ</h1>
 
-    <div class="container">
-        <div class="camera-section">
-            <h2>カメラ映像</h2>
-            <video id="camera-stream" width="320" height="240" autoplay playsinline></video>
-            <canvas id="snapshot-canvas" style="display:none;"></canvas> <!-- QRコード読み取り用の一時Canvas -->
-        </div>
+    <input type="file" id="qrImageInput" accept="image/*">
+    <p id="statusMessage">画像ファイルを選択してください。</p>
 
-        <div class="preview-section">
-            <h2>読み込んだQRコード (プレビュー)</h2>
-            <canvas id="qr-preview-canvas" width="250" height="250"></canvas>
-            <p id="qr-data-display">QRコードデータ: まだ読み込まれていません</p>
-        </div>
-
-        <div class="controls-section">
-            <button id="decompose-button">分解</button>
-        </div>
-
-        <div class="analysis-section">
-            <h2>分解・並び替え結果</h2>
-            <canvas id="analysis-canvas" width="250" height="250"></canvas>
-            <p id="ratio-display">白黒比率: N/A</p>
-        </div>
+    <div id="qrCanvasContainer">
+        <canvas id="qrCanvas"></canvas>
     </div>
 
-    <!-- jsQRライブラリの読み込み (CDN) -->
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <!-- 自作スクリプトの読み込み -->
+    <div id="displayOptions" style="margin-bottom: 10px;">
+        <input type="checkbox" id="useOriginalColorsCheckbox" checked>
+        <label for="useOriginalColorsCheckbox">元画像の色でモジュールを表示</label>
+    </div>
+
+    <div id="sortOptions" style="margin-bottom: 10px;">
+        並び替え方法:
+        <input type="radio" id="sortBinaryOld" name="sortMethod" value="binaryOld" checked>
+        <label for="sortBinaryOld">2値 (白/黒)</label>
+        <input type="radio" id="sortClassified" name="sortMethod" value="classified">
+        <label for="sortClassified">白/黒/色</label>
+        <input type="radio" id="sortHue" name="sortMethod" value="hue">
+        <label for="sortHue">色相順 (白→黒→色)</label>
+    </div>
+
+    <fieldset id="thresholdControls" style="margin-bottom: 15px; padding: 10px; border: 1px solid #ccc;">
+        <legend>色分類閾値</legend>
+        <div>
+            <label for="whiteLThresholdSlider">白 輝度(L) >= </label>
+            <input type="range" id="whiteLThresholdSlider" min="0" max="100" value="90">
+            <span id="whiteLThresholdValue">90</span>%
+        </div>
+        <div>
+            <label for="graySThresholdSlider">白/黒 彩度(S) <= </label>
+            <input type="range" id="graySThresholdSlider" min="0" max="100" value="40">
+            <span id="graySThresholdValue">40</span>%
+        </div>
+        <div>
+            <label for="blackLThresholdSlider">黒 輝度(L) <= </label>
+            <input type="range" id="blackLThresholdSlider" min="0" max="100" value="20">
+            <span id="blackLThresholdValue">20</span>%
+        </div>
+        <button id="autoAdjustThresholdsButton" style="margin-top: 10px;">閾値を自動調整</button>
+    </fieldset>
+
+    <button id="decomposeButton" style="display: none;">分解</button>
+    
+    <div id="qrInfo">
+        <h3>読み取り結果 (データ):</h3>
+        <p id="qrDataOutput">-</p>
+        <h3>モジュール分類 (概数):</h3>
+        <p id="ratioOutput">-</p>
+    </div>
+
+    <!-- ライブラリ -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+    
     <script src="script.js"></script>
 </body>
 </html>
