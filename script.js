@@ -74,7 +74,16 @@ class PerspectiveTransform {
 // --- Color utility functions ---
 function getModuleAverageColor(sourceCtx, sx, sy, sWidth, sHeight) {
     if (sWidth < 1 || sHeight < 1) return { r: 255, g: 255, b: 255 };
-    const imageData = sourceCtx.getImageData(Math.floor(sx), Math.floor(sy), Math.ceil(sWidth), Math.ceil(sHeight));
+    const floorSx = Math.floor(sx);
+    const floorSy = Math.floor(sy);
+    const ceilSWidth = Math.ceil(sWidth);
+    const ceilSHeight = Math.ceil(sHeight);
+    const effSx = Math.max(0, floorSx);
+    const effSy = Math.max(0, floorSy);
+    const effSWidth = Math.min(ceilSWidth, sourceCtx.canvas.width - effSx);
+    const effSHeight = Math.min(ceilSHeight, sourceCtx.canvas.height - effSy);
+    if (effSWidth <= 0 || effSHeight <= 0) return { r: 255, g: 255, b: 255 };
+    const imageData = sourceCtx.getImageData(effSx, effSy, effSWidth, effSHeight);
     const data = imageData.data;
     let r = 0, g = 0, b = 0;
     let count = 0;
@@ -92,6 +101,21 @@ function getModuleAverageColor(sourceCtx, sx, sy, sWidth, sHeight) {
     };
 }
 
+function getModuleCenterPixelColor(sourceCtx, sx, sy, sWidth, sHeight) {
+    const centerX = Math.floor(sx + sWidth / 2);
+    const centerY = Math.floor(sy + sHeight / 2);
+    const effCenterX = Math.max(0, Math.min(centerX, sourceCtx.canvas.width - 1));
+    const effCenterY = Math.max(0, Math.min(centerY, sourceCtx.canvas.height - 1));
+    try {
+        const pixelData = sourceCtx.getImageData(effCenterX, effCenterY, 1, 1).data;
+        return { r: pixelData[0], g: pixelData[1], b: pixelData[2] };
+    } catch (e) {
+        console.warn("Error getting center pixel, falling back to white:", e);
+        return { r: 255, g: 255, b: 255 };
+    }
+}
+
+
 function rgbToHex(r, g, b) {
     return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
 }
@@ -102,7 +126,7 @@ function rgbToHsl(r, g, b) {
     let h, s, l = (max + min) / 2;
 
     if (max === min) {
-        h = s = 0; // achromatic
+        h = s = 0; 
     } else {
         const d = max - min;
         s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
@@ -126,6 +150,8 @@ let whiteLThresholdSlider, whiteLThresholdValueSpan;
 let graySThresholdSlider, graySThresholdValueSpan;
 let blackLThresholdSlider, blackLThresholdValueSpan;
 let autoAdjustThresholdsButton;
+let colorMethodRadios;
+let showAdvancedOptionsCheckbox, advancedOptionsPanel;
 
 let currentAnimatedModules = [];
 let moduleCountGlobal = 0;
@@ -136,19 +162,23 @@ let correctedQrImageCanvas = null;
 let currentQrVersion = null;
 let useOriginalColorsCheckboxElement = null;
 let sortMethodRadios = null;
-let qrCanvas, ctx; // Define qrCanvas and ctx globally for clearCanvasAndData
+let qrCanvas, ctx;
+let qrDataOutputElement, ratioOutputElement; // For advanced panel info
 
 window.addEventListener('load', () => {
     const imageInput = document.getElementById('qrImageInput');
-    qrCanvas = document.getElementById('qrCanvas'); // Assign to global qrCanvas
-    ctx = qrCanvas.getContext('2d'); // Assign to global ctx
+    qrCanvas = document.getElementById('qrCanvas');
+    ctx = qrCanvas.getContext('2d');
     const decomposeButton = document.getElementById('decomposeButton');
-    const qrDataOutput = document.getElementById('qrDataOutput');
-    const ratioOutput = document.getElementById('ratioOutput');
+    qrDataOutputElement = document.getElementById('qrDataOutput'); 
+    ratioOutputElement = document.getElementById('ratioOutput');
     const statusMessage = document.getElementById('statusMessage');
     
     useOriginalColorsCheckboxElement = document.getElementById('useOriginalColorsCheckbox');
     sortMethodRadios = document.getElementsByName('sortMethod');
+    colorMethodRadios = document.getElementsByName('colorMethod');
+    showAdvancedOptionsCheckbox = document.getElementById('showAdvancedOptionsCheckbox');
+    advancedOptionsPanel = document.getElementById('advancedOptionsPanel');
 
     whiteLThresholdSlider = document.getElementById('whiteLThresholdSlider');
     whiteLThresholdValueSpan = document.getElementById('whiteLThresholdValue');
@@ -186,6 +216,13 @@ window.addEventListener('load', () => {
             else drawCurrentModules();
         }
     }));
+    colorMethodRadios.forEach(radio => radio.addEventListener('change', () => {
+        if (correctedQrImageCanvas) reAnalyzeAndRedraw();
+    }));
+    showAdvancedOptionsCheckbox.addEventListener('change', (e) => {
+        advancedOptionsPanel.style.display = e.target.checked ? 'block' : 'none';
+    });
+
 
     whiteLThresholdSlider.addEventListener('input', (e) => {
         L_WHITE_THRESHOLD_VAR = parseInt(e.target.value);
@@ -227,7 +264,7 @@ window.addEventListener('load', () => {
             if (codeObject && codeObject.version && codeObject.location && validateLocation(codeObject.location)) {
                 currentQrVersion = codeObject.version;
                 statusMessage.textContent = 'QRコード検出、歪み補正中...';
-                qrDataOutput.textContent = codeObject.data;
+                qrDataOutputElement.textContent = codeObject.data;
                 
                 const warpedCanvasSize = 256;
                 const warpedCanvas = document.createElement('canvas');
@@ -244,27 +281,29 @@ window.addEventListener('load', () => {
 
                 moduleCountGlobal = (currentQrVersion * 4) + 17;
                 
-                reAnalyzeAndRedraw(false);
+                reAnalyzeAndRedraw(false); // This will do the initial analysis and drawing
 
                 decomposeButton.style.display = 'inline-block';
                 decomposeButton.disabled = false;
                 isDecomposed = false;
                 decomposeButton.textContent = "分解";
-                statusMessage.textContent = 'QRコードを歪み補正し、モジュール解析しました。';
+                statusMessage.textContent = 'QRコードの読み込みに成功しました。'; // Auto-adjust message removed
 
             } else {
                 currentQrVersion = null;
                 let errorMsg = 'QRコードが見つからないか、必要な情報(バージョン/位置情報)が取得できませんでした。';
                 if (codeObject && codeObject.location && !validateLocation(codeObject.location)) { errorMsg = 'QRコードの位置情報が不正です。';}
                 statusMessage.textContent = errorMsg;
-                qrDataOutput.textContent = '-'; ratioOutput.textContent = '-';
+                qrDataOutputElement.textContent = '-'; 
+                ratioOutputElement.textContent = '-';
                 decomposeButton.style.display = 'none';
             }
         } catch (error) {
             currentQrVersion = null;
             console.error("画像処理エラー:", error);
             statusMessage.textContent = `エラーが発生しました: ${error.message}`;
-            qrDataOutput.textContent = '-'; ratioOutput.textContent = '-';
+            qrDataOutputElement.textContent = '-'; 
+            ratioOutputElement.textContent = '-';
             decomposeButton.style.display = 'none';
         }
     }
@@ -297,10 +336,10 @@ window.addEventListener('load', () => {
                 hexColor: colorMod.hexColor,
                 hslColor: colorMod.hslColor,
                 classification: colorMod.classification,
-                currentX: existingModule ? existingModule.currentX : binaryMod.originalGridX * canvasModuleSize,
-                currentY: existingModule ? existingModule.currentY : binaryMod.originalGridY * canvasModuleSize,
-                targetX: existingModule ? existingModule.targetX : binaryMod.originalGridX * canvasModuleSize,
-                targetY: existingModule ? existingModule.targetY : binaryMod.originalGridY * canvasModuleSize,
+                currentX: existingModule && typeof existingModule.currentX === 'number' ? existingModule.currentX : binaryMod.originalGridX * canvasModuleSize,
+                currentY: existingModule && typeof existingModule.currentY === 'number' ? existingModule.currentY : binaryMod.originalGridY * canvasModuleSize,
+                targetX: existingModule && typeof existingModule.targetX === 'number' ? existingModule.targetX : binaryMod.originalGridX * canvasModuleSize,
+                targetY: existingModule && typeof existingModule.targetY === 'number' ? existingModule.targetY : binaryMod.originalGridY * canvasModuleSize,
                 sourceRect: {
                     x: binaryMod.originalGridX * sourceModuleActualWidth,
                     y: binaryMod.originalGridY * sourceModuleActualHeight,
@@ -312,7 +351,7 @@ window.addEventListener('load', () => {
         currentAnimatedModules = newModules;
         
         const versionText = currentQrVersion !== null ? `Ver: ${currentQrVersion}` : 'Ver: N/A';
-        ratioOutput.textContent = `白(分類): ${colorAnalysis.counts.white}, 黒(分類): ${colorAnalysis.counts.black}, 色: ${colorAnalysis.counts.color} (${versionText})`;
+        ratioOutputElement.textContent = `白(分類): ${colorAnalysis.counts.white}, 黒(分類): ${colorAnalysis.counts.black}, 色: ${colorAnalysis.counts.color} (${versionText})`;
         console.log(`Re-analyzed. Binary: Black=${binaryBlackCount}, White=${moduleCountGlobal*moduleCountGlobal - binaryBlackCount}`);
 
         if (isDecomposed && animateSort) {
@@ -324,15 +363,16 @@ window.addEventListener('load', () => {
 
     function autoAdjustThresholds() {
         if (!correctedQrImageCanvas || currentAnimatedModules.length === 0) {
-            statusMessage.textContent = "まず画像を読み込んでください。";
+            statusMessage.textContent = "まず画像を読み込んで解析してください。";
             return;
         }
 
         statusMessage.textContent = "閾値を自動調整中...";
-        const allHslValues = currentAnimatedModules.map(m => m.hslColor);
+        const tempColorAnalysis = analyzeQrModulesWithColor(correctedQrImageCanvas, moduleCountGlobal);
+        const allHslValues = tempColorAnalysis.modules.map(m => m.hslColor);
         
         const sumS = allHslValues.reduce((acc, hsl) => acc + hsl.s, 0);
-        const avgS = allHslValues.length > 0 ? Math.round(sumS / allHslValues.length) : 40; // Handle empty array
+        const avgS = allHslValues.length > 0 ? Math.round(sumS / allHslValues.length) : 40;
         S_GRAY_THRESHOLD_VAR = Math.min(100, Math.max(0, avgS));
         graySThresholdSlider.value = S_GRAY_THRESHOLD_VAR;
         graySThresholdValueSpan.textContent = S_GRAY_THRESHOLD_VAR;
@@ -355,7 +395,7 @@ window.addEventListener('load', () => {
         blackLThresholdValueSpan.textContent = L_BLACK_THRESHOLD_VAR;
 
         console.log(`Auto-adjusted thresholds: White L >= ${L_WHITE_THRESHOLD_VAR}, Gray S <= ${S_GRAY_THRESHOLD_VAR}, Black L <= ${L_BLACK_THRESHOLD_VAR}`);
-        reAnalyzeAndRedraw();
+        reAnalyzeAndRedraw(); // Re-analyze and redraw with new thresholds
         statusMessage.textContent = "閾値を自動調整しました。";
     }
     
@@ -363,43 +403,24 @@ window.addEventListener('load', () => {
         const sourceCtx = sourceCanvas.getContext('2d');
         const modules = [];
         let blackModulesCount = 0;
-
         const modulePixelWidth = sourceCanvas.width / moduleCount;
         const modulePixelHeight = sourceCanvas.height / moduleCount;
-
         for (let row = 0; row < moduleCount; row++) {
             for (let col = 0; col < moduleCount; col++) {
                 const sx = (col + 0.5) * modulePixelWidth; 
                 const sy = (row + 0.5) * modulePixelHeight;
-                
                 const sx_floor = Math.floor(sx);
                 const sy_floor = Math.floor(sy);
-
                 if (sx_floor < 0 || sx_floor >= sourceCanvas.width || sy_floor < 0 || sy_floor >= sourceCanvas.height) {
-                    modules.push({
-                        id: row * moduleCount + col,
-                        originalGridX: col,
-                        originalGridY: row,
-                        isBinaryBlack: false 
-                    });
+                    modules.push({ id: row * moduleCount + col, originalGridX: col, originalGridY: row, isBinaryBlack: false });
                     continue;
                 }
-                
                 const pixelData = sourceCtx.getImageData(sx_floor, sy_floor, 1, 1).data;
-                const r = pixelData[0];
-                const g = pixelData[1];
-                const b = pixelData[2];
+                const r = pixelData[0], g = pixelData[1], b = pixelData[2];
                 const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
                 const isBlack = brightness < BINARY_BRIGHTNESS_THRESHOLD;
-
                 if (isBlack) blackModulesCount++;
-                
-                modules.push({
-                    id: row * moduleCount + col,
-                    originalGridX: col,
-                    originalGridY: row,
-                    isBinaryBlack: isBlack 
-                });
+                modules.push({ id: row * moduleCount + col, originalGridX: col, originalGridY: row, isBinaryBlack: isBlack });
             }
         }
         return { modules, blackModulesCount };
@@ -409,19 +430,21 @@ window.addEventListener('load', () => {
         const sourceCtx = sourceCanvas.getContext('2d');
         const modules = [];
         const counts = { white: 0, black: 0, color: 0 };
-
+        const selectedColorMethod = document.querySelector('input[name="colorMethod"]:checked').value;
         const modulePixelWidth = sourceCanvas.width / moduleCount;
         const modulePixelHeight = sourceCanvas.height / moduleCount;
-
         for (let row = 0; row < moduleCount; row++) {
             for (let col = 0; col < moduleCount; col++) {
                 const sx = col * modulePixelWidth;
                 const sy = row * modulePixelHeight;
-                
-                const avgRgb = getModuleAverageColor(sourceCtx, sx, sy, modulePixelWidth, modulePixelHeight);
-                const hex = rgbToHex(avgRgb.r, avgRgb.g, avgRgb.b);
-                const hsl = rgbToHsl(avgRgb.r, avgRgb.g, avgRgb.b);
-                
+                let representativeRgb;
+                if (selectedColorMethod === 'center') {
+                    representativeRgb = getModuleCenterPixelColor(sourceCtx, sx, sy, modulePixelWidth, modulePixelHeight);
+                } else { 
+                    representativeRgb = getModuleAverageColor(sourceCtx, sx, sy, modulePixelWidth, modulePixelHeight);
+                }
+                const hex = rgbToHex(representativeRgb.r, representativeRgb.g, representativeRgb.b);
+                const hsl = rgbToHsl(representativeRgb.r, representativeRgb.g, representativeRgb.b);
                 let classification = 'color';
                 if (hsl.l >= L_WHITE_THRESHOLD_VAR && hsl.s <= S_GRAY_THRESHOLD_VAR) {
                     classification = 'white';
@@ -430,17 +453,12 @@ window.addEventListener('load', () => {
                 } else if (L_BLACK_THRESHOLD_VAR > 0 && hsl.l <= L_BLACK_THRESHOLD_VAR * 1.2 && hsl.s <= S_GRAY_THRESHOLD_VAR * 1.5) {
                      classification = 'black';
                 }
-
                 counts[classification]++;
-                
                 modules.push({
                     id: row * moduleCount + col,
-                    originalGridX: col,
-                    originalGridY: row,
-                    averageRgb: avgRgb,
-                    hexColor: hex,
-                    hslColor: hsl,
-                    classification: classification
+                    originalGridX: col, originalGridY: row,
+                    averageRgb: representativeRgb, 
+                    hexColor: hex, hslColor: hsl, classification: classification
                 });
             }
         }
@@ -450,13 +468,12 @@ window.addEventListener('load', () => {
     function drawCurrentModules() {
         ctx.clearRect(0, 0, qrCanvas.width, qrCanvas.height);
         if (currentAnimatedModules.length === 0) return;
-
         const useOriginal = useOriginalColorsCheckboxElement.checked;
         const selectedSortMethod = document.querySelector('input[name="sortMethod"]:checked').value;
-        ctx.imageSmoothingEnabled = !useOriginal;
-
+        ctx.imageSmoothingEnabled = !useOriginal; 
         for (const module of currentAnimatedModules) {
             if (useOriginal && correctedQrImageCanvas && module.sourceRect) {
+                ctx.imageSmoothingEnabled = false; 
                 ctx.drawImage(
                     correctedQrImageCanvas,
                     module.sourceRect.x, module.sourceRect.y,
@@ -487,11 +504,9 @@ window.addEventListener('load', () => {
     function sortAndAnimateModules(decompose) {
         if (animationFrameId) cancelAnimationFrame(animationFrameId);
         decomposeButton.disabled = true;
-
         let currentTargetIndex = 0;
         const modulesToPlace = [...currentAnimatedModules];
         const selectedSortMethod = document.querySelector('input[name="sortMethod"]:checked').value;
-
         if (decompose) {
             modulesToPlace.sort((a, b) => {
                 if (selectedSortMethod === 'binaryOld') {
@@ -501,7 +516,6 @@ window.addEventListener('load', () => {
                 } else {
                     const classDiff = classificationOrder[a.classification] - classificationOrder[b.classification];
                     if (classDiff !== 0) return classDiff;
-
                     if (a.classification === 'color' && selectedSortMethod === 'hue') {
                         const hueDiff = a.hslColor.h - b.hslColor.h;
                         if (hueDiff !== 0) return hueDiff;
@@ -515,7 +529,6 @@ window.addEventListener('load', () => {
         } else { 
              modulesToPlace.sort((a,b) => a.id - b.id);
         }
-        
         modulesToPlace.forEach(sortedModule => {
             const moduleInCurrent = currentAnimatedModules.find(m => m.id === sortedModule.id);
             if(!moduleInCurrent) return;
@@ -557,8 +570,7 @@ window.addEventListener('load', () => {
     }
 
     function clearCanvasAndData() {
-        // ctx はグローバルで定義されている
-        if (ctx && qrCanvas) { // 念のため存在チェック
+        if (ctx && qrCanvas) {
             ctx.clearRect(0, 0, qrCanvas.width, qrCanvas.height);
         }
         currentAnimatedModules = [];
@@ -569,6 +581,10 @@ window.addEventListener('load', () => {
             cancelAnimationFrame(animationFrameId);
             animationFrameId = null;
         }
+        // Reset advanced panel info if it exists
+        if (qrDataOutputElement) qrDataOutputElement.textContent = '-';
+        if (ratioOutputElement) ratioOutputElement.textContent = '-';
+
     }
 
     function loadImageAsync(file) {
@@ -597,11 +613,10 @@ window.addEventListener('load', () => {
     }
 
     function performPerspectiveWarp(sourceImageData, targetCanvas, qrLocation) {
-        const targetCtx = targetCanvas.getContext('2d'); // ここでは willReadFrequently は targetCanvas が読み取り主体なら設定
+        const targetCtx = targetCanvas.getContext('2d');
         const targetWidth = targetCanvas.width;
         const targetHeight = targetCanvas.height;
         const targetPixelData = targetCtx.createImageData(targetWidth, targetHeight);
-
         const loc = qrLocation;
         const transformer = new PerspectiveTransform(
             0, 0, targetWidth, 0, 0, targetHeight, targetWidth, targetHeight,
@@ -610,13 +625,11 @@ window.addEventListener('load', () => {
             loc.bottomLeftCorner.x, loc.bottomLeftCorner.y,
             loc.bottomRightCorner.x, loc.bottomRightCorner.y
         );
-
         for (let y = 0; y < targetHeight; y++) {
             for (let x = 0; x < targetWidth; x++) {
                 const [srcX, srcY] = transformer.transform(x + 0.5, y + 0.5);
                 const sx_floor = Math.floor(srcX);
                 const sy_floor = Math.floor(srcY);
-
                 const targetPixelIndex = (y * targetWidth + x) * 4;
                 if (sx_floor >= 0 && sx_floor < sourceImageData.width && sy_floor >= 0 && sy_floor < sourceImageData.height) {
                     const sourcePixelIndex = (sy_floor * sourceImageData.width + sx_floor) * 4;
