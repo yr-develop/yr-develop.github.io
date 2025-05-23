@@ -3,61 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QRコード解析アプリ</title>
+    <title>QRコード分解機</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>QRコード解析アプリ</h1>
+    <h1>QRコード分解機</h1>
 
-    <input type="file" id="qrImageInput" accept="image/*">
+    <div id="mainControls"> <!-- ファイル入力とCanvasをまとめる（オプションパネル外） -->
+        <input type="file" id="qrImageInput" accept="image/*">
+        <div id="qrCanvasContainer" style="margin-top: 10px; margin-bottom: 10px;">
+            <canvas id="qrCanvas"></canvas>
+        </div>
+    </div>
+
     <p id="statusMessage">画像ファイルを選択してください。</p>
-
-    <div id="qrCanvasContainer">
-        <canvas id="qrCanvas"></canvas>
-    </div>
-
-    <div id="displayOptions" style="margin-bottom: 10px;">
-        <input type="checkbox" id="useOriginalColorsCheckbox" checked>
-        <label for="useOriginalColorsCheckbox">元画像の色でモジュールを表示</label>
-    </div>
-
-    <div id="sortOptions" style="margin-bottom: 10px;">
-        並び替え方法:
-        <input type="radio" id="sortBinaryOld" name="sortMethod" value="binaryOld" checked>
-        <label for="sortBinaryOld">2値 (白/黒)</label>
-        <input type="radio" id="sortClassified" name="sortMethod" value="classified">
-        <label for="sortClassified">白/黒/色</label>
-        <input type="radio" id="sortHue" name="sortMethod" value="hue">
-        <label for="sortHue">色相順 (白→黒→色)</label>
-    </div>
-
-    <fieldset id="thresholdControls" style="margin-bottom: 15px; padding: 10px; border: 1px solid #ccc;">
-        <legend>色分類閾値</legend>
-        <div>
-            <label for="whiteLThresholdSlider">白 輝度(L) >= </label>
-            <input type="range" id="whiteLThresholdSlider" min="0" max="100" value="90">
-            <span id="whiteLThresholdValue">90</span>%
-        </div>
-        <div>
-            <label for="graySThresholdSlider">白/黒 彩度(S) <= </label>
-            <input type="range" id="graySThresholdSlider" min="0" max="100" value="40">
-            <span id="graySThresholdValue">40</span>%
-        </div>
-        <div>
-            <label for="blackLThresholdSlider">黒 輝度(L) <= </label>
-            <input type="range" id="blackLThresholdSlider" min="0" max="100" value="20">
-            <span id="blackLThresholdValue">20</span>%
-        </div>
-        <button id="autoAdjustThresholdsButton" style="margin-top: 10px;">閾値を自動調整</button>
-    </fieldset>
-
-    <button id="decomposeButton" style="display: none;">分解</button>
+    <button id="decomposeButton" style="display: none; margin-top: 10px; margin-bottom:15px;">分解</button>
     
-    <div id="qrInfo">
-        <h3>読み取り結果 (データ):</h3>
-        <p id="qrDataOutput">-</p>
-        <h3>モジュール分類 (概数):</h3>
-        <p id="ratioOutput">-</p>
+    <div id="showAdvancedOptionsContainer" style="margin-bottom: 10px;">
+        <input type="checkbox" id="showAdvancedOptionsCheckbox">
+        <label for="showAdvancedOptionsCheckbox">詳細設定</label>
+    </div>
+
+    <div id="advancedOptionsPanel" style="display: none; width: 100%; max-width: 500px; margin-bottom: 20px;">
+        <div id="displayOptions" style="margin-bottom: 10px; border: 1px solid #eee; padding:10px; border-radius:5px;">
+            <input type="checkbox" id="useOriginalColorsCheckbox" checked>
+            <label for="useOriginalColorsCheckbox">元画像の色でモジュールを表示</label>
+        </div>
+
+        <div id="sortOptions" style="margin-bottom: 10px; border: 1px solid #eee; padding:10px; border-radius:5px;">
+            <strong>並び替え方法:</strong><br>
+            <input type="radio" id="sortBinaryOld" name="sortMethod" value="binaryOld" checked>
+            <label for="sortBinaryOld">2値 (白/黒)</label><br>
+            <input type="radio" id="sortClassified" name="sortMethod" value="classified">
+            <label for="sortClassified">白/黒/色</label><br>
+            <input type="radio" id="sortHue" name="sortMethod" value="hue">
+            <label for="sortHue">色相順 (白→黒→色)</label>
+        </div>
+
+        <fieldset id="thresholdControls" style="padding: 10px; border: 1px solid #ccc;  margin-bottom: 10px;">
+            <legend>色分類設定</legend>
+            <div style="margin-bottom: 10px;">
+                色判定方法:
+                <input type="radio" id="colorMethodAverage" name="colorMethod" value="average" checked>
+                <label for="colorMethodAverage">平均色</label>
+                <input type="radio" id="colorMethodCenter" name="colorMethod" value="center">
+                <label for="colorMethodCenter">中心ピクセル</label>
+            </div>
+            <div>
+                <label for="whiteLThresholdSlider">白 輝度(L) >= </label>
+                <input type="range" id="whiteLThresholdSlider" min="0" max="100" value="90">
+                <span id="whiteLThresholdValue">90</span>%
+            </div>
+            <div>
+                <label for="graySThresholdSlider">白/黒 彩度(S) <= </label>
+                <input type="range" id="graySThresholdSlider" min="0" max="100" value="40">
+                <span id="graySThresholdValue">40</span>%
+            </div>
+            <div>
+                <label for="blackLThresholdSlider">黒 輝度(L) <= </label>
+                <input type="range" id="blackLThresholdSlider" min="0" max="100" value="20">
+                <span id="blackLThresholdValue">20</span>%
+            </div>
+            <button id="autoAdjustThresholdsButton" style="margin-top: 10px;">閾値を自動調整</button>
+        </fieldset>
+        
+        <div id="qrInfo" style="border: 1px solid #eee; padding:10px; border-radius:5px;">
+            <h3>読み取り結果 (データ):</h3>
+            <p id="qrDataOutput">-</p>
+            <h3>モジュール分類 (概数):</h3>
+            <p id="ratioOutput">-</p>
+        </div>
     </div>
 
     <!-- ライブラリ -->
